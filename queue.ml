@@ -46,7 +46,7 @@ module BatchedQueue : QUEUE = struct
     | _ :: t -> { f = t; r }
 end
 
-module BankersQueue = struct
+module BankersQueue : QUEUE = struct
   open Stream
 
   type 'a queue =
@@ -79,4 +79,51 @@ module BankersQueue = struct
     match f with
     | (lazy Nil) -> raise EMPTY
     | (lazy (Cons (_, t))) -> queue { f = t; lenf = lenf - 1; r; lenr }
+end
+
+module PhysicistsQueue : QUEUE = struct
+  type 'a queue =
+    { w : 'a list
+    ; f : 'a list lazy_t
+    ; lenf : int
+    ; r : 'a list
+    ; lenr : int
+    }
+
+  (* Invariant:
+     1. w is prefix of f, w is empty only if f is empty
+     2. |f| >= |r| *)
+
+  let empty = { w = []; f = lazy []; lenf = 0; r = []; lenr = 0 }
+
+  let isEmpty { lenf; _ } = lenf = 0
+
+  let check_w q =
+    match q.w with
+    | [] -> { q with w = Lazy.force q.f }
+    | _ -> q
+
+  let check_r ({ f; lenf; r; lenr; _ } as q) =
+    if lenf >= lenr then
+      q
+    else
+      let w' = Lazy.force f in
+      { w = w'; f = lazy (w' @ r); lenf = lenf + lenr; r = []; lenr = 0 }
+
+  let queue q = check_w (check_r q)
+
+  let snoc { w; f; lenf; r; lenr } x =
+    queue { w; f; lenf; lenr = lenr + 1; r = x :: r }
+
+  let head q =
+    match q.w with
+    | [] -> raise EMPTY
+    | h :: _ -> h
+
+  let tail { w; f; lenf; r; lenr } =
+    match w with
+    | [] -> raise EMPTY
+    | _ :: t ->
+      queue
+        { w = t; lenf = lenf - 1; r; lenr; f = lazy (List.tl @@ Lazy.force f) }
 end
