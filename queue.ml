@@ -127,3 +127,49 @@ module PhysicistsQueue : QUEUE = struct
       queue
         { w = t; lenf = lenf - 1; r; lenr; f = lazy (List.tl @@ Lazy.force f) }
 end
+
+module RealTimeQueue : QUEUE = struct
+  open Stream
+
+  type 'a queue =
+    { f : 'a stream
+    ; s : 'a stream
+    ; r : 'a list
+    }
+
+  (* Invariant: |s| = |f| - |r| *)
+
+  let empty = { f = Stream.empty; s = Stream.empty; r = [] }
+
+  let isEmpty { f; _ } =
+    match f with
+    | (lazy Nil) -> true
+    | _ -> false
+
+  let rec rotate f r a =
+    lazy
+      (match (f, r) with
+      | (lazy Nil), h :: _ -> Cons (h, a)
+      | (lazy (Cons (fh, ft))), rh :: rt ->
+        Cons (fh, rotate ft rt (lazy (Cons (rh, a))))
+      | _ -> failwith "unreachable")
+
+  let queue { f; s; r } =
+    match s with
+    | (lazy Nil) ->
+      let f' = rotate f r (lazy Nil) in
+      { f = f'; s = f'; r = [] }
+    | (lazy (Cons (_, t))) -> { f; r; s = t }
+
+  let snoc { f; s; r } x = queue { f; s; r = x :: r }
+
+  let head { f; _ } =
+    match f with
+    | (lazy Nil) -> raise EMPTY
+    | (lazy (Cons (h, _))) -> h
+
+  let tail { f; r; s } =
+    match f with
+    | (lazy Nil) -> raise EMPTY
+    | (lazy (Cons (_, t))) -> queue { f = t; s; r }
+end
